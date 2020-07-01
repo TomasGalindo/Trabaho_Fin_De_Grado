@@ -1,0 +1,97 @@
+/*
+ *El coche se para durante 5 segundos (ámbar) 
+ */
+function StopEverything() {
+    for (let index = 0; index <= 5; index++) {
+        radio.sendNumber(0)
+        basic.pause(1000)
+    }
+}
+/*
+ * el coche se para durante 10 segundos (rojo)
+ *  
+*/
+function stopCar() {
+    for (let index = 0; index <= 10; index++) {
+        radio.sendNumber(0)
+        basic.pause(1000)
+    }
+}
+/*
+ * cuando se pulsa el boton quiere decir que el peaton esta 
+ * esperando para pasar
+ */
+input.onButtonPressed(Button.A, function () {
+    peopleCont = 1
+})
+/**
+ * Establecer las luces dependiendo del estado en el 
+ * que se encuentre
+ */
+function setLights(sts: string) {
+    if (sts == "GREEN") {
+        lights.smileShow(NeoPixelColors.Green)
+    } else if (sts == "YELLOW") {
+        lights.smileShow(NeoPixelColors.Yellow)
+    } else if (sts == "RED") {
+        lights.smileShow(NeoPixelColors.Red)
+    }
+}
+/**
+ * Inicializa todas las variables, para que vuelva aun 
+ * estado inicial 
+ */
+function initVars() {
+    peopleCont = 0
+    timeCont = 0
+    timeLimit = Math.randomRange(MIN_TIME, MAX_TIME)
+}
+/**
+ * MAquina de estados 
+ * 3 estados para el microbit (rojo,ambar y verde)
+ * verde: el coche puede avanzar
+ * ambar: sirve para esperar y que los coches puedan acabar el cruce y no
+ * avance nada mas
+ * rojo: los coches no se mueven (se mueven lo posibles peatones) 
+ */
+function stateMachine(sts: string) {
+    if (sts == "GREEN") {
+        radio.sendNumber(1)
+        basic.pause(1000)
+        timeCont = timeCont + 1
+        if (timeCont > 10) { //solo entra si lleva 10 segundos en verde
+            if (peopleCont == 1) {
+                sts = "YELLOW"
+            }
+            if (timeCont == timeLimit) {
+                sts = "YELLOW"
+            }
+        }
+    } else if (sts == "YELLOW") {
+        StopEverything()
+        sts = "RED"
+    } else if (sts == "RED") {
+        stopCar()
+        initVars()
+        sts = "GREEN"
+    }
+    return sts
+}
+
+//CONSTANTES
+let NUM_GROUP1 = 1
+let MIN_TIME = 15
+let MAX_TIME = 30
+
+//Variables
+let timeLimit = Math.randomRange(MIN_TIME, MAX_TIME)
+let peopleCont = 0
+let timeCont = 0
+radio.setGroup(NUM_GROUP1)
+let state = "GREEN"
+
+basic.forever(function () {
+    setLights(state)
+    state = stateMachine(state)
+})
+
