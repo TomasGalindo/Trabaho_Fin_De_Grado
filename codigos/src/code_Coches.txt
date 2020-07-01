@@ -1,0 +1,593 @@
+/**
+ * Esto es para que el coche vaya lo más recto posible y así en el salto no se desvíe
+ * mucho de la carretera
+ * s: potencia que va a tener el motor (teorica)
+ * x: potencia que se le va a sumar para que vaya más rápido
+ * */
+function fixGoStraight(s: number, x: number) {
+    let speedFix = s + x
+    return speedFix
+}
+/**
+ * Calibración del coche 
+ * Utilizamos el sensor de linea de la derecha para ver si detecta una linea negra
+ * que se frene y consiga el tiempo que ha tardado
+ * No tiene parametros de entrada, 
+ * devuelve el tiempo que ha tardado
+ */
+function calibration() {
+    let init = input.runningTime()
+    let sensor
+    let speedLeft = fixGoStraight(50, MOTOR_LEFT_FIX)
+    let speedRight = fixGoStraight(50, MOTOR_RIGHT_FIX)
+    do {
+        sensor = gigglebot.lineReadSensor(gigglebotWhichTurnDirection.Right)
+        gigglebot.motorPowerAssignBoth(speedLeft, speedRight)
+    } while (sensor > 100)
+    let fin = input.runningTime()
+    let time = fin - init
+    gigglebot.stop()
+    return time
+}
+/**
+ * Con reglas de tres encontramos la equivalencia experimental a
+ * la velocidad teorica dependiendo del tiempo hallado en la calibracion
+ * time: tiempo experimental hallado en la calibracion
+ * spd: velocidad teorica que vamos a "adaptar"
+ * devuelve la velocidad adaptada
+ */
+function fixSpeed(time: number, spd: number) {
+    let myTime = time * 50 / TIME_EXP
+    let velNew = spd * myTime / 50
+    return velNew
+}
+/**
+ * Va a ir frenando dependiendo de si encuentra obstáculos
+ * valueDist: valor del sensor de distancia
+ * speed: velocidad a la que va el coche
+ * devuelve la velocidad adaptada
+ */
+function slowDown(valueDist: number, speed: number) {
+    let prct = 0
+    let v = 0
+    prct = valueDist / DIST_ROAD
+    if (prct <= 0.2) {
+        v = 0
+    } else {
+        v = prct * speed
+    }
+    return v
+}
+
+/**
+ * Imprime por el display del microbit
+ * lo que ha captado al leer el codigo
+ */
+function printMemo() {
+    basic.showNumber(memo.length)
+    basic.showString("hola")
+    for (let index = 0; index < memo.length; index++) {
+        basic.showNumber(memo[index])
+        basic.showString("H")
+        basic.pause(1000)
+    }
+}
+
+/**
+ * Compara 2 arrays, valor por valor, para comprobar que son iguales
+ * list: array1
+ * list2: array2
+ * devuelve verdadero o falso si son iguales o no
+ */
+function equal(list: Array<number>, list2: Array<number>) {
+    let equalVar = true
+    for (let i = 0; i < list.length; i++) {
+        if (list[i] != list2[i]) {
+            equalVar = false
+            break
+        }
+    }
+    return equalVar
+}
+/**
+ * indica si el sensor se ha activado o no
+ * sensorName: tipo de sensor que se va a activar
+ * sensorValue: valor que recibimos del sensor que compararemos
+ * con valores experimentales
+ * Devolverá verdadero o falso si se activa o no el sensor
+ */
+function sensorActivated(sensorName: string, sensorValue: number) {
+    let activated = false;
+
+    if (sensorName == "leftLine") { //Bit_Sincro
+        if (sensorValue <= LEFT_SENSOR) {
+            activated = true;
+        }
+    } else if (sensorName == "distLect") {
+        /*Distancia que va a leer si esta en el bitDeSincro */
+        if (sensorValue <= DIST_LECT) {
+            activated = true;
+        }
+    } else if (sensorName == "distRoad") {
+        /*Distancia que va a leer si esta en el drive*/
+        if (sensorValue <= DIST_ROAD) {
+            activated = true;
+        }
+    }
+    return activated
+}
+/**
+ * Valores estáticos que vamos a utilizar para la calibración del
+ * sensor de linea
+ * devuelve una lista con la media y la varianza
+ */
+function calibrateLineSensor() {
+    let maxI = 208
+    let minI = 108
+    let meanI = (maxI + minI) / 2
+    let varI = 0.4 * (maxI - minI)
+    let list2: number[] = [meanI, varI]
+    return list2
+}
+/**
+ * Funcion perteneciente al estado en marcha del coche
+ * rightSensor: valor del sensor de linea de la derecha
+ * speed: velocidad del coche
+ */
+function drive(rightSensor: number, speed: number) {
+    let devi: number = rightSensor - meanInt;
+    let motorLeft: number = 0
+    let motorRight: number = 0
+
+    if (Math.abs(devi) < varInt) {
+        motorRight = speed - devi / 16;
+        motorLeft = speed + devi / 16;
+        gigglebot.motorPowerAssignBoth(motorLeft, motorRight)
+    } else {
+        motorRight = speed - devi / 6;
+        motorLeft = speed + devi / 6;
+        gigglebot.motorPowerAssignBoth(motorLeft, motorRight)
+    }
+}
+/**
+ * SI detecta negro devuelve 1 si deteca blanco devuelve 0
+ * Se utiliza para la lectura del codigo
+ * left: valor del sensor de la izquierda
+ */
+function transforLeftMeasure(leftSensor: number) {
+    let bit = 0
+    if (sensorActivated("leftLine", leftSensor)) {
+        bit = 1
+    } else {
+        bit = 0
+    }
+    return bit
+}
+/**
+ * Detecta el cambio de blanco a negro durante la lectura del
+ * codigo
+ * bit: el bit que lee
+ * devuelve true si detecta cambio de color. 
+ */
+function detectChange(bit: number) {
+    let isChange = false
+
+    if (lastBit != bit) {
+        isChange = true
+    }
+    lastBit = bit
+    return isChange
+}
+
+/**
+ * Lectura del codigo.
+ * array: variable donde va guardando los cambios de transicion y donde 
+ * acaba sacando el codigo entero
+ * bit: bit que ha leido en ese instate
+ * devuelve el array
+ */
+function readCode(array: Array<number>, bit: number) {
+    let newTrans: number = 0
+    let difTime: number = 0
+    if (lastTrans == null) {
+        lastTrans = input.runningTime()
+    } else {
+        newTrans = input.runningTime()
+        difTime = newTrans - lastTrans
+        if (diffGlobTime == null) {
+            diffGlobTime = difTime
+        }
+        if (difTime >= diffGlobTime / 2 + (0.5 * (diffGlobTime / 2))) {
+            array.push(bit)
+            lastTrans = newTrans
+        }
+    }
+    return array
+}
+/**
+ * Devuelve a sus valores iniciales las variables utilizadas para la
+ * lectura. así, si vuelve a detectar un codigo estara borrado todo
+ */
+function initVarLect() {
+    lastTrans = null
+    diffGlobTime = null
+    lastBit = 1
+}
+
+/**
+ * Durante un tiempo establecido por la variable Time, el robot
+ * ira recto, sin leer ninguno de los sensores
+ * time: tiempo que va a estar yendo recto
+ * speedRight: velocidad motor derecha
+ * speedLeft: velocidad motor izquierda
+ * 
+ */
+function contTime(time: number, speedLeft: number, speedRight: number) {
+    let init = input.runningTime()
+    let speedLeftFinal = fixGoStraight(speedLeft, MOTOR_LEFT_FIX)
+    let speedRightFinal = fixGoStraight(speedRight, MOTOR_RIGHT_FIX)
+    let contTime = init //Inicio del contador lo igualo a inicio para que empiece sincronizado
+    while (contTime < init + time) {
+        gigglebot.motorPowerAssignBoth(speedLeftFinal, speedRightFinal)
+        contTime = input.runningTime()
+    }
+}
+
+/**
+ * Esta funcion adecua el tiempo que van a saltar los coches
+ * dependiendo de una variable de control. Y va a ajustar el tiempo
+ * dependiendo de la velocidad
+ * control: elige dependiendo de que salto sea
+ * speed: velocidad del coche en ese momento
+ * Devuelve el tiempo que va a utilizar para hacer el salto
+ */
+function fixTime(control: number, speed: number) {
+    let vmin = 30
+    let time = 0
+
+    if (control == 1) { //Semaforo 
+        time = 1375
+    } else if (control == 0) { // salida de rotonda
+        time = 1350
+    } else { //entrada de rotonda
+        time = 1100
+    }
+    //Regla de 3 inversa para que si va a mas velocidad utilizara menos tiempo
+    let timeTotal = vmin * time / speed
+    return timeTotal
+}
+/**
+ * Esta funcion realiza el salto teniendo en cuenta el tipo de bifurcacion que sea
+ * Utilizamos la velocidad minima adaptada (calibrada con la bateria)
+ */
+function jumpRoad(control: number) {
+    //Control determina si estoy en semaforo o bifurcacion
+    //1 = semaforo 0 = salida 2 entrada
+    let time = 0
+    speed = speedMin
+    time = fixTime(control, speed)
+    contTime(time, speed, speed)
+}
+
+/**
+ * Esta es la funcion para cuando encuetra una salida de carretera
+ * decide tambien si es rotonda o no, para 
+ */
+function jumpExit() {
+    //Aleatoriamente salto o no
+    if (Math.randomBoolean()) {
+        jumpRoad(0)
+        //Ajuste de velocidad para que coja bien el bit en el salto de la rotonda
+        if (roundabout) {
+            speedAux = speed
+            speed = speedMin
+        }
+    } else {
+        roundabout = false
+    }
+}
+
+/**
+ * Cuando encuentra una entrada de carretera
+ * saltoCarretera es para diferenciar entre la rotonda o no
+ */
+function jumpEntrance() {
+    jumpRoad(2)
+    /**
+     * Si estaba saltoCarretera a true
+     * recupero la velocidad inicial
+     */
+    if (roundabout) {
+        speed = speedAux
+    }
+    roundabout = false //si esta en rotonda cambia de true a false,
+    //si no estaba en rotonda cambia false por falswe
+}
+/**
+ * Entuentra una señal de stop
+ * El coche para un tiempo aleatorio entre 10 t 15 segundos
+ */
+function signalStop() {
+    let init = 0
+    let contTime = 0
+    let time = Math.randomRange(10, 15)
+    while (contTime < init + time) {
+        gigglebot.stop()
+        basic.pause(1000)
+        contTime = contTime + 1
+    }
+}
+/**
+ * con la radio, guardo la variable que recibo
+ */
+radio.onReceivedNumber(function (receivedNumber) {
+    valRadio = receivedNumber
+})
+/**
+ * Ejecutamos la accion dependiendo del codigo que hemos leido
+ * memory: array con el codigo leido
+ */
+function ejectMemo(memory: Array<number>) {
+    let sts = ""
+    speed = speedMin
+
+    if (equal(memory, [1, 0, 0, 0, 1])) { //CODE 1 C1
+        //CAMBIO DE VELOCIDAD
+        speedInit = fixSpeed(timeRead, 33)
+        speed = speedInit
+        sts = "ROAD"
+    } else if (equal(memory, [1, 0, 0, 0, 0])) { //CODE 2 C1 C2
+        //STOP
+        signalStop()
+        sts = "ROAD"
+    } else if (equal(memory, [1, 0, 0, 1, 1])) { //CODE 3 C1
+        //Opcion Radio
+        radio.setGroup(1)
+        sts = "RADIO"
+    } else if (equal(memory, [1, 1, 0, 0, 1])) { //CODE 9 C1 
+        //CAMBIO DE VELOCIDAD
+        speedInit = fixSpeed(timeRead, 30)
+        speed = speedInit
+        sts = "ROAD"
+    } else if (equal(memory, [1, 1, 0, 0, 0])) { // CODE 10 C1
+        //Opcion Rotonda
+        roundabout = true
+        sts = "ROAD_EXIT"
+    } else if (equal(memory, [1, 1, 0, 1, 1])) { // CODE 11 C1
+        //Opcion Rotonda
+        roundabout = true
+        sts = "ROAD_EXIT"
+    } else if (equal(memory, [1, 0, 0, 1, 0])) { //CODE 4 C2
+        //salida de carretera
+        roundabout = false
+        sts = "ROAD_EXIT"
+    } else if (equal(memory, [1, 0, 1, 0, 1])) { //CODE 5 C2
+        //Opcion Radio code arriba
+        radio.setGroup(1)
+        sts = "RADIO"
+    } else if (equal(memory, [1, 0, 1, 0, 0])) { //CODE 6 C2
+        //codigo horizontal
+        radio.setGroup(2) //5ó6
+        sts = "RADIO"
+    } else if (equal(memory, [1, 1, 1, 0, 1])) { // CODE 13 c2
+        //semaforo mono
+        radio.setGroup(7)
+        sts = "RADIO"
+    } else if (equal(memory, [1, 1, 1, 0, 0])) { // CODE 14 C2
+        //entrada carretera
+        sts = "ROAD_ENTRANCE"
+    } else {
+        sts = "ROAD"
+    }
+    return sts
+}
+/**
+ * Decide si he podido encontrar la carretera o no
+ * HAcemos una comprobacion entre las medidas de los dos sensores
+ * si es cercana a 0, los valores son parecidos, por lo tanto sera
+ * parecido a blanco, --> LOST
+ * si hay diferencia significante, quiere decir que se encuentra en la carretera
+ * si es negativo (derecho lee blanco e izq negro) --> lost
+ */
+function amILost() {
+    let amILost
+    let valueLimit = 50
+    let right = gigglebot.lineReadSensor(gigglebotWhichTurnDirection.Right)
+    let left = gigglebot.lineReadSensor(gigglebotWhichTurnDirection.Left)
+    let diff = left - right
+
+    if (diff < 0) {
+        //caso 2
+        amILost = "LOST"
+    } else if (diff >= 0 && diff <= valueLimit) {
+        amILost = "LOST"
+    } else {
+        amILost = "ROAD"
+    }
+    return amILost
+    /**
+     * Si es un numero pequeño quiere decir que esta muy cerca hacia el blanco
+     * es decir a la izquierda de la carretera
+     * 
+     * Caso 2: Si es negativo estoy hacia la derecha (sens derecha en el blanco y el izquier 
+     * en el negro (en la carretera))
+     */
+}
+function estadoLost(right: number, left: number) {
+    gigglebot.stop()
+    basic.showString("LOST")
+}
+/**
+ * Maquina de estados
+ * sts: valor del estado en el que se encuentra
+ * right: valor den sensor de la derecha
+ * left: valor del sensor de la izquierda
+ * dist: valor del sensor de distancia
+ */
+function maquinaEstados(sts: string, right: number, left: number, dist: number) {
+    if (sts == "ROAD") {
+        if (sensorActivated("leftLine", left)) {
+            sts = "BIT_SINCRO"
+        } else {
+            if (sensorActivated("distRoad", dist)) {
+                speed = slowDown(dist, speedInit) /*1234Cambiar por velocidad salida de arreglo*/
+            } else {
+                speed = speedInit //1234Cambiar por velocidad salida de arreglo
+            }
+            drive(right, speed)
+            sts = "ROAD"
+        }
+    } else if (sts == "BIT_SINCRO") {
+        if (sensorActivated("distLect", dist)) { //Si
+            gigglebot.stop()
+            sts = "BIT_SINCRO"
+        } else {
+            if (roundabout) {
+                sts = "ROAD_ENTRANCE"
+            } else {
+                speed = 30
+                sts = "READING"
+            }
+        }
+    } else if (sts == "READING") {
+        let bit = transforLeftMeasure(left)
+
+        if (memo.length < 5) {
+            if (detectChange(bit)) {
+                memo = readCode(memo, bit)
+            }
+            drive(right, speed)
+            sts = "READING"
+        } else {
+            //Esto es para solucionar si tengo un negro al final del codigo
+            //Para que no vuelva al estado Bit_Sincro
+            if (bit == 1) {
+                drive(right, speed)
+                sts = "READING"
+            } else {
+                sts = "PROCESS_MEMO"
+            }
+        }
+    } else if (sts == "PROCESS_MEMO") {
+        sts = ejectMemo(memo)
+        initVarLect()
+        memo = []
+    } else if (sts == "RADIO") {
+        if (sensorActivated("distRoad", dist)) {
+            gigglebot.stop()
+        } else {
+            if (valRadio == 1) {
+                radio.setGroup(99)
+                jumpRoad(1)
+                sts = amILost()
+                valRadio = null
+            } else if (valRadio == null || valRadio == 0) {  //No hay semaforo
+                gigglebot.stop()
+            }
+        }
+    } else if (sts == "ROAD_EXIT") {
+        if (sensorActivated("distRoad", dist)) {
+            gigglebot.stop()
+        } else {
+            jumpExit()
+            sts = amILost()
+        }
+    } else if (sts == "ROAD_ENTRANCE") {
+        if (sensorActivated("distRoad", dist)) {
+            gigglebot.stop()
+        } else {
+            jumpEntrance()
+            sts = amILost()
+        }
+    } else if (sts == "LOST") {
+        gigglebot.stop()
+        basic.showString("Lost")
+        sts = amILost()
+    }
+    return sts
+}
+/**
+ * Selecciona el color que va a tener el gigglebot 
+ * dependiendo del estado en el que se encuentre
+ */
+function selectLight(sts: string) {
+    if (sts == "ROAD") {
+        if (SPEED_INIT == 30) {
+            lights.smileShow(NeoPixelColors.Green)
+        } else if (SPEED_INIT == 33) {
+            lights.smileShow(NeoPixelColors.Yellow)
+        }
+    } else if (sts == "LOST") {
+        lights.smileShow(NeoPixelColors.Red)
+    } else if (sts == "READING") {
+        lights.smileShow(NeoPixelColors.Orange)
+    } else if (sts == "RADIO") {
+        lights.smileShow(NeoPixelColors.Indigo)
+    }
+}
+//Constantes:
+//Sensores
+let DIST_ROAD = 200
+let DIST_LECT = 255
+let LEFT_SENSOR = 150
+//Velocidades
+let SPEED_INIT = 30 //El valor que elijo //30-40-50
+let SPEED_MIN = 30
+let TIME_EXP = 2200 //Valor experimental de ver como el coche va mas recto
+//Estos valores son experimentales y se utilizan para que el coche vaya mas recto
+let MOTOR_RIGHT_FIX = 1
+let MOTOR_LEFT_FIX = 1
+//VARIABLES GLOBALES
+let contA = 0
+let contB = 0
+
+input.onButtonPressed(Button.A, function () {
+    contA = 1
+})
+
+input.onButtonPressed(Button.B, function () {
+    //Sin el IF, si se pulsa el B antes que A, una vez termine la calibración
+    //salta directamente a hacer el recorrido
+    // Se hace Para que siempre se deba pulsar la A primero. Si se pulsa B antes, 
+    //no se suma el caontador, y después de la calibración seguira esperando el B.
+    if (contA != 0) {
+        contB = 1
+    } else {
+        contB = 0
+    }
+})
+
+while (contA == 0) {
+    basic.showString("A")
+}
+basic.pause(1000)
+
+let timeRead = calibration()
+let speedMin = fixSpeed(timeRead, SPEED_MIN)
+let speedInit = fixSpeed(timeRead, SPEED_INIT)
+let speed = speedInit
+let speedAux = 0
+let lastTrans: number = null
+let diffGlobTime: number = null
+let roundabout = false
+let memo: Array<number> = []
+let state = "ROAD"
+let lastBit = 1
+let stats: Array<number> = calibrateLineSensor()
+let meanInt = stats[0]
+let varInt = stats[1]
+let valRadio: number = null
+
+while (contB == 0) {
+    basic.showString("B")
+}
+basic.clearScreen()
+basic.pause(1000)
+
+basic.forever(function () {
+    selectLight(state)
+    let dist = gigglebot.distanceSensorReadRangeContinuous()
+    let right = gigglebot.lineReadSensor(gigglebotWhichTurnDirection.Right)
+    let left = gigglebot.lineReadSensor(gigglebotWhichTurnDirection.Left)
+    state = maquinaEstados(state, right, left, dist)
+})
