@@ -1,0 +1,73 @@
+/*
+ * Se paran todos los coches durante 5 segundos (Ambar)
+ */
+function StopEverything() {
+    for (let index = 0; index < 5; index++) {
+        radio.setGroup(NUM_GROUP1)
+        radio.sendNumber(0)
+        radio.setGroup(NUM_GROUP2)
+        radio.sendNumber(0)
+        radio.setGroup(NUM_GROUP3)
+        radio.sendNumber(0)
+        basic.pause(1000)
+    }
+}
+/*
+* se activa el semáforo para uno de los carriles
+* durante 10 segundos
+*/
+function active(num: number, num2: number) {
+    for (let index = 0; index < 10; index++) {
+        radio.setGroup(NUM_GROUP1)
+        radio.sendNumber(num)
+        radio.setGroup(NUM_GROUP2)
+        radio.sendNumber(num2)
+        radio.setGroup(NUM_GROUP3)
+        radio.sendNumber(num - num2)  //(envia o 1 0 -1)
+        basic.pause(1000)
+    }
+}
+
+function setLights(sts: string) {
+    if (sts == "GREEN") {
+        lights.smileShow(NeoPixelColors.Green)
+    } else if (sts == "YELLOW") {
+        lights.smileShow(NeoPixelColors.Yellow)
+    } else if (sts == "RED") {
+        lights.smileShow(NeoPixelColors.Red)
+    }
+}
+
+function stateMachine(sts: string) {
+    if (sts == "GREEN") {
+        active(0, 1)
+        sts = "YELLOW"
+        stsLast = "GREEN"
+    } else if (sts == "YELLOW") {
+        StopEverything()
+        if (stsLast == "GREEN") {
+            sts = "RED"
+        } else if (stsLast == "RED") {
+            sts = "GREEN"
+        }
+    } else if (sts == "RED") {
+        active(1, 0)
+        sts = "YELLOW"
+        stsLast = "RED"
+
+    }
+    return sts
+}
+
+let NUM_GROUP1 = 1
+let NUM_GROUP2 = 2
+let NUM_GROUP3 = 3 //CANAL PARA INDICAR AL SEMAFORO ESCLAVO
+let state = "GREEN"
+let stsLast = "GREEN"
+
+
+basic.forever(function () {
+    setLights(state)
+    state = stateMachine(state)
+})
+
