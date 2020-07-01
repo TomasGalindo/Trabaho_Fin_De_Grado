@@ -1,0 +1,12 @@
+radio.setGroup(3)
+
+radio.onReceivedNumber(function (receivedNumber: number) {
+    if (receivedNumber == 1) {
+        lights.smileShow(NeoPixelColors.Green)
+    } else if (receivedNumber == 0) {
+        lights.smileShow(NeoPixelColors.Yellow)
+    } else if (receivedNumber == -1) {
+        lights.smileShow(NeoPixelColors.Red)
+    }
+})
+
