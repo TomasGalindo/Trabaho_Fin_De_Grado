@@ -1,0 +1,48 @@
+//Establece las luces dependiendo del estado del gigglebot
+function setLight(sts: string) {
+    if (sts == "GREEN") {
+        lights.smileShow(NeoPixelColors.Green)
+    } else if (sts == "RED") {
+        lights.smileShow(NeoPixelColors.Red)
+    }
+}
+//maquina de estados
+function stateMachine(sts: string, dist: number) {
+    if (sts == "GREEN") {
+        if (dist <= DIST_MIN) {
+            sts = "RED"
+        } else {
+            radio.sendNumber(1)
+            basic.pause(1000)
+            sts = "GREEN"
+        }
+    } else if (sts == "RED") {
+        if (dist <= DIST_MIN) {
+            radio.sendNumber(0)
+            basic.pause(1000)
+            sts = "RED"
+        } else {
+            sts = "GREEN"
+        }
+    }
+    return sts
+}
+
+//CONST
+let DIST_MIN = 600 //Distancia 
+let NUM_GROUP1 = 7
+
+//VAR
+let state = "GREEN"
+radio.setGroup(NUM_GROUP1)
+
+basic.forever(function () {
+    setLight(state)
+    let dist = gigglebot.distanceSensorReadRangeContinuous()
+    state = stateMachine(state, dist)
+    if (dist <= DIST_MIN) {
+        radio.sendNumber(0)
+    } else {
+        radio.sendNumber(1)
+    }
+})
